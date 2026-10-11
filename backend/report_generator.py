@@ -132,7 +132,7 @@ def generate_recommendations(df: pd.DataFrame) -> List[Dict[str, Any]]:
 
     # --- Type Correction Recommendations ---
     for col in df.columns:
-        if df[col].dtype == object:
+        if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
             sample = df[col].dropna().head(20)
             if len(sample) == 0:
                 continue

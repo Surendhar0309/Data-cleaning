@@ -1,7 +1,7 @@
 """
 Data Profiler Module
-Automatically analyzes uploaded datasets to detect types, distributions,
-and generate comprehensive summaries without any hardcoded column names.
+Automatic dataset analysis: column type detection, missing values,
+distributions and correlations. No hardcoded column names.
 """
 
 from typing import Any, Dict, List
@@ -10,155 +10,96 @@ import numpy as np
 import pandas as pd
 
 
-def classify_columns(df: pd.DataFrame) -> Dict[str, List[str]]:
-    """
-    Classify all columns into: numerical, categorical, datetime, text.
+def _looks_like_datetime(s: pd.Series) -> bool:
+    """True if >=90% of a non-numeric text sample parses as a date."""
+    sample = s.dropna().astype(str).head(50)
+    if len(sample) == 0:
+        return False
+    if pd.to_numeric(sample, errors="coerce").notna().any():
+        return False
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        parsed = pd.to_datetime(sample, errors="coerce")
+    return parsed.notna().mean() >= 0.9
 
-    Logic:
-      - Datetime: columns with dtype datetime64 or that can be parsed as dates.
-      - Numerical: int/float dtypes.
-      - Text: object dtype with high cardinality or long strings.
-      - Categorical: object dtype with low cardinality.
-    """
-    numerical: List[str] = []
-    categorical: List[str] = []
-    datetime_cols: List[str] = []
-    text_cols: List[str] = []
 
+def classify_columns(df: pd.DataFrame, cat_threshold: int = 50) -> Dict[str, List[str]]:
+    """Classify columns into numerical, categorical, datetime and text."""
+    result: Dict[str, List[str]] = {
+        "numerical": [], "categorical": [], "datetime": [], "text": [],
+    }
+    n = len(df)
     for col in df.columns:
-        dtype = df[col].dtype
-
-        if pd.api.types.is_datetime64_any_dtype(dtype):
-            datetime_cols.append(col)
-            continue
-
-        if pd.api.types.is_numeric_dtype(dtype):
-            numerical.append(col)
-            continue
-
-        # Try parsing as datetime
-        if dtype == object:
-            sample = df[col].dropna().head(20)
-            if len(sample) > 0:
-                try:
-                    pd.to_datetime(sample)
-                    datetime_cols.append(col)
-                    continue
-                except (ValueError, TypeError):
-                    pass
-
-            # Distinguish text vs categorical
-            nunique = df[col].nunique()
-            n_rows = len(df)
-            avg_len = sample.astype(str).str.len().mean() if len(sample) > 0 else 0
-
-            if nunique > min(50, n_rows * 0.5) or avg_len > 50:
-                text_cols.append(col)
-            else:
-                categorical.append(col)
-            continue
-
-        # Boolean or other
-        if pd.api.types.is_bool_dtype(dtype):
-            categorical.append(col)
+        s = df[col]
+        if pd.api.types.is_bool_dtype(s):
+            result["categorical"].append(col)
+        elif pd.api.types.is_datetime64_any_dtype(s):
+            result["datetime"].append(col)
+        elif pd.api.types.is_numeric_dtype(s):
+            result["numerical"].append(col)
+        elif _looks_like_datetime(s):
+            result["datetime"].append(col)
         else:
-            categorical.append(col)
+            nunique = s.nunique(dropna=True)
+            # many distinct values relative to rows -> free text
+            if nunique > cat_threshold and n > 0 and nunique / n > 0.5:
+                result["text"].append(col)
+            else:
+                result["categorical"].append(col)
+    return result
 
+
+def compute_missing_values(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """Per-column missing counts and percentages."""
+    total = len(df)
+    out = {}
+    for col in df.columns:
+        count = int(df[col].isnull().sum())
+        out[col] = {
+            "count": count,
+            "percentage": round(count / total * 100, 2) if total > 0 else 0.0,
+        }
+    return out
+
+
+def compute_correlations(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
+    """Pearson correlation matrix over numerical columns (NaN -> 0)."""
+    num_cols = classify_columns(df)["numerical"]
+    num_cols = [c for c in num_cols if not pd.api.types.is_bool_dtype(df[c])]
+    if len(num_cols) < 2:
+        return {}
+    corr = df[num_cols].corr().fillna(0.0)
     return {
-        "numerical": numerical,
-        "categorical": categorical,
-        "datetime": datetime_cols,
-        "text": text_cols,
+        r: {c: round(float(corr.loc[r, c]), 4) for c in num_cols} for r in num_cols
     }
 
 
-def compute_missing_values(df: pd.DataFrame) -> Dict[str, Any]:
-    """Compute missing value statistics for each column."""
-    total = len(df)
-    missing_info = {}
-    for col in df.columns:
-        count = int(df[col].isnull().sum())
-        missing_info[col] = {
-            "count": count,
-            "percentage": round((count / total) * 100, 2) if total > 0 else 0.0,
-        }
-    return missing_info
-
-
-def compute_statistics(df: pd.DataFrame, column_types: Dict[str, List[str]]) -> Dict[str, Any]:
-    """Compute descriptive statistics for numerical columns."""
+def compute_statistics(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """Descriptive statistics for numerical columns."""
     stats = {}
-    for col in column_types.get("numerical", []):
-        series = df[col].dropna()
-        if len(series) == 0:
-            stats[col] = {}
+    for col in classify_columns(df)["numerical"]:
+        s = df[col].dropna()
+        if len(s) == 0:
             continue
         stats[col] = {
-            "mean": round(float(series.mean()), 4),
-            "median": round(float(series.median()), 4),
-            "std": round(float(series.std()), 4),
-            "min": round(float(series.min()), 4),
-            "max": round(float(series.max()), 4),
-            "q1": round(float(series.quantile(0.25)), 4),
-            "q3": round(float(series.quantile(0.75)), 4),
-            "skewness": round(float(series.skew()), 4),
+            "mean": round(float(s.mean()), 4),
+            "median": round(float(s.median()), 4),
+            "std": round(float(s.std()), 4) if len(s) > 1 else 0.0,
+            "min": float(s.min()),
+            "max": float(s.max()),
         }
     return stats
 
 
-def compute_correlations(df: pd.DataFrame, column_types: Dict[str, List[str]]) -> Dict[str, Dict[str, float]]:
-    """Compute correlation matrix for numerical columns."""
-    num_cols = column_types.get("numerical", [])
-    if len(num_cols) < 2:
-        return {}
-    corr_df = df[num_cols].corr()
-    return {
-        col: {k: round(v, 4) for k, v in row.items()}
-        for col, row in corr_df.to_dict().items()
-    }
-
-
-def compute_unique_values(df: pd.DataFrame, column_types: Dict[str, List[str]]) -> Dict[str, Any]:
-    """Compute unique value counts for categorical columns."""
-    result = {}
-    for col in column_types.get("categorical", []):
-        vc = df[col].value_counts(dropna=False).head(20)
-        result[col] = {
-            "nunique": int(df[col].nunique()),
-            "top_values": {str(k): int(v) for k, v in vc.items()},
-        }
-    return result
-
-
 def profile_dataset(df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Generate a full dataset profile.
-
-    Returns a dict with:
-      - shape (rows, cols)
-      - column_types classification
-      - missing values
-      - statistics for numerical columns
-      - correlation matrix
-      - unique values for categorical columns
-      - data types
-    """
-    column_types = classify_columns(df)
-    missing = compute_missing_values(df)
-    stats = compute_statistics(df, column_types)
-    correlations = compute_correlations(df, column_types)
-    uniques = compute_unique_values(df, column_types)
-
-    dtypes = {col: str(df[col].dtype) for col in df.columns}
-
+    """Full dataset profile (shape matches what the frontend expects)."""
     return {
-        "shape": {"rows": len(df), "columns": len(df.columns)},
-        "column_types": column_types,
-        "missing_values": missing,
-        "statistics": stats,
-        "correlations": correlations,
-        "unique_values": uniques,
-        "dtypes": dtypes,
-        "memory_usage_mb": round(df.memory_usage(deep=True).sum() / 1024 / 1024, 3),
+        "shape": {"rows": int(len(df)), "columns": int(len(df.columns))},
+        "column_types": classify_columns(df),
+        "dtypes": {c: str(t) for c, t in df.dtypes.items()},
+        "missing_values": compute_missing_values(df),
         "duplicate_rows": int(df.duplicated().sum()),
+        "correlations": compute_correlations(df),
+        "statistics": compute_statistics(df),
     }

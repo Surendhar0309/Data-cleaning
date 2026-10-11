@@ -45,12 +45,12 @@ def one_hot_encode(
     if column not in df.columns:
         raise ValueError(f"Column '{column}' not found")
 
-    nunique = df[column].nunique()
-    if nunique > max_categories:
-        top = df[column].value_counts().head(max_categories).index.tolist()
-        df[column] = df[column].where(df[column].isin(top), other="Other")
+    source = df[column]
+    if source.nunique() > max_categories:
+        top = source.value_counts().head(max_categories).index.tolist()
+        source = source.where(source.isin(top) | source.isna(), other="Other")
 
-    dummies = pd.get_dummies(df[column], prefix=column, drop_first=drop_first)
+    dummies = pd.get_dummies(source, prefix=column, drop_first=drop_first).astype(int)
     new_columns = list(dummies.columns)
     df = pd.concat([df, dummies], axis=1)
 
@@ -131,12 +131,10 @@ def log_transform(df: pd.DataFrame, column: str) -> Tuple[pd.DataFrame, Dict[str
     if not pd.api.types.is_numeric_dtype(df[column]):
         raise ValueError(f"Column '{column}' is not numeric")
 
-    # Use log1p to handle zeros
     min_val = float(df[column].min())
     if min_val < 0:
-        # Shift to make all values positive
-        shift = abs(min_val) + 1
-        df[f"{column}_log"] = np.log1p(df[column] + shift)
+        # Shift so the minimum becomes 0, then log1p
+        df[f"{column}_log"] = np.log1p(df[column] - min_val)
     else:
         df[f"{column}_log"] = np.log1p(df[column])
 
@@ -230,7 +228,7 @@ def get_available_operations(df: pd.DataFrame) -> Dict[str, Any]:
                 "column": col,
                 "available": ["log_transform"],
             })
-        elif dtype == object:
+        elif pd.api.types.is_object_dtype(dtype) or pd.api.types.is_string_dtype(dtype):
             nunique = df[col].nunique()
             ops = ["label_encode"]
             if nunique <= 20:

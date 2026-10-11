@@ -10,6 +10,11 @@ import numpy as np
 import pandas as pd
 
 
+def _is_text_dtype(dtype) -> bool:
+    """True for object and pandas string dtypes (pandas 3 uses 'str')."""
+    return pd.api.types.is_object_dtype(dtype) or pd.api.types.is_string_dtype(dtype)
+
+
 # =============================================================================
 # Missing Value Handling
 # =============================================================================
@@ -198,6 +203,27 @@ def detect_outliers_zscore(df: pd.DataFrame, column: str, threshold: float = 3.0
     }
 
 
+def _outlier_mask(df: pd.DataFrame, column: str, method: str, **kwargs) -> pd.Series:
+    """Boolean mask of ALL outlier rows (the detect_* helpers truncate indices for display)."""
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found")
+    if not pd.api.types.is_numeric_dtype(df[column]):
+        raise ValueError(f"Column '{column}' is not numeric")
+    series = df[column]
+    if method == "iqr":
+        factor = kwargs.get("factor", 1.5)
+        q1, q3 = series.quantile(0.25), series.quantile(0.75)
+        iqr = q3 - q1
+        return ((series < q1 - factor * iqr) | (series > q3 + factor * iqr)).fillna(False)
+    if method == "zscore":
+        std = series.std()
+        if not std or pd.isna(std):
+            return pd.Series(False, index=df.index)
+        z = ((series - series.mean()) / std).abs()
+        return (z > kwargs.get("threshold", 3.0)).fillna(False)
+    raise ValueError(f"Unknown method: '{method}'")
+
+
 def remove_outliers(
     df: pd.DataFrame, column: str, method: str = "iqr", **kwargs
 ) -> Tuple[pd.DataFrame, str]:
@@ -209,15 +235,20 @@ def remove_outliers(
     else:
         raise ValueError(f"Unknown method: '{method}'")
 
-    indices = info["outlier_indices"]
-    df = df.drop(index=indices).reset_index(drop=True)
-    return df, f"Removed {len(indices)} outliers from '{column}' using {method}"
+    mask = _outlier_mask(df, column, method, **kwargs)
+    removed = int(mask.sum())
+    df = df.loc[~mask].reset_index(drop=True)
+    return df, f"Removed {removed} outliers from '{column}' using {method}"
 
 
 def cap_outliers(
     df: pd.DataFrame, column: str, method: str = "iqr", **kwargs
 ) -> Tuple[pd.DataFrame, str]:
     """Cap outliers (winsorize) instead of removing them."""
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found")
+    if not pd.api.types.is_numeric_dtype(df[column]):
+        raise ValueError(f"Column '{column}' is not numeric")
     if method == "iqr":
         info = detect_outliers_iqr(df, column, factor=kwargs.get("factor", 1.5))
         lower = info["lower_bound"]
@@ -254,7 +285,7 @@ def detect_type_issues(df: pd.DataFrame) -> List[Dict[str, Any]]:
             continue
 
         # Numeric stored as string
-        if dtype == object:
+        if _is_text_dtype(dtype):
             try:
                 pd.to_numeric(sample)
                 issues.append({
