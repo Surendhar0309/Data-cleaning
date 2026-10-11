@@ -113,6 +113,7 @@ pandas==2.1.4
 openpyxl==3.1.2
 python-multipart==0.0.6
 scikit-learn==1.3.2
+xlrd==2.0.1
 ```
 
 ---

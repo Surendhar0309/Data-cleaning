@@ -12,6 +12,7 @@ let RECOMMENDATIONS = [];
 const $ = id => document.getElementById(id);
 const show = el => el && el.classList.remove('hidden');
 const hide = el => el && el.classList.add('hidden');
+const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
 function showLoading(msg = 'Processing...') {
   $('loadingText').textContent = msg;
@@ -117,7 +118,7 @@ function renderColumnTypes() {
     if (cols.length === 0) continue;
     html += `<div class="type-group">
       <div class="type-group-label">${g.label} (${cols.length})</div>
-      <div class="type-tags">${cols.map(c => `<span class="tag ${g.cls}">${c}</span>`).join('')}</div>
+      <div class="type-tags">${cols.map(c => `<span class="tag ${g.cls}">${esc(c)}</span>`).join('')}</div>
     </div>`;
   }
   container.innerHTML = html;
@@ -161,8 +162,8 @@ function renderMissingHeatmap() {
       ? 'rgba(16,185,129,0.3)'
       : `rgba(239,68,68,${0.2 + intensity * 0.6})`;
     html += `<div>
-      <div class="heatmap-cell" style="background:${color}" title="${col}: ${pct}%"></div>
-      <div class="heatmap-label" title="${col}">${col.length > 8 ? col.slice(0, 7) + '...' : col}</div>
+      <div class="heatmap-cell" style="background:${color}" title="${esc(col)}: ${pct}%"></div>
+      <div class="heatmap-label" title="${esc(col)}">${esc(col.length > 8 ? col.slice(0, 7) + '...' : col)}</div>
     </div>`;
   }
   html += '</div>';
@@ -181,11 +182,11 @@ function renderCorrelationMatrix() {
 
   const displayCols = cols.slice(0, 10);
   let html = '<table class="corr-table"><tr><th></th>';
-  for (const c of displayCols) html += `<th title="${c}">${c.length > 6 ? c.slice(0, 5) + '..' : c}</th>`;
+  for (const c of displayCols) html += `<th title="${esc(c)}">${esc(c.length > 6 ? c.slice(0, 5) + '..' : c)}</th>`;
   html += '</tr>';
 
   for (const row of displayCols) {
-    html += `<tr><th title="${row}">${row.length > 6 ? row.slice(0, 5) + '..' : row}</th>`;
+    html += `<tr><th title="${esc(row)}">${esc(row.length > 6 ? row.slice(0, 5) + '..' : row)}</th>`;
     for (const col of displayCols) {
       const val = corr[row]?.[col] ?? 0;
       const abs = Math.abs(val);
@@ -213,7 +214,7 @@ function renderMissingTable() {
   let html = '';
   for (const [col, info] of entries) {
     html += `<div class="missing-row">
-      <span class="missing-col-name">${col}</span>
+      <span class="missing-col-name">${esc(col)}</span>
       <div class="missing-bar-wrap"><div class="missing-bar-fill" style="width:${Math.min(info.percentage, 100)}%"></div></div>
       <span class="missing-pct">${info.percentage}%</span>
     </div>`;
@@ -245,11 +246,11 @@ function renderRecommendations() {
   let html = '';
   for (const rec of RECOMMENDATIONS.slice(0, 20)) {
     html += `<div class="rec-item">
-      <span class="rec-priority ${rec.priority}">${rec.priority}</span>
+      <span class="rec-priority ${esc(rec.priority)}">${esc(rec.priority)}</span>
       <div class="rec-content">
-        <div class="rec-column">${rec.column} <span style="color:var(--text-muted);font-size:10px">[${rec.category}]</span></div>
-        <div class="rec-reason">${rec.reason}</div>
-        <div class="rec-suggestion">Suggestion: ${rec.suggestion}</div>
+        <div class="rec-column">${esc(rec.column)} <span style="color:var(--text-muted);font-size:10px">[${esc(rec.category)}]</span></div>
+        <div class="rec-reason">${esc(rec.reason)}</div>
+        <div class="rec-suggestion">Suggestion: ${esc(rec.suggestion)}</div>
       </div>
     </div>`;
   }
@@ -273,7 +274,7 @@ function populateSelect(id, options) {
   const el = $(id);
   if (!el) return;
   el.innerHTML = '<option value="">Select column...</option>' +
-    options.map(o => `<option value="${o}">${o}</option>`).join('');
+    options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
 }
 
 async function loadDataPreview() {
@@ -291,7 +292,7 @@ function renderDataTable(rows, columns) {
   }
 
   let html = '<table class="data-table"><thead><tr>';
-  for (const col of columns) html += `<th>${col}</th>`;
+  for (const col of columns) html += `<th>${esc(col)}</th>`;
   html += '</tr></thead><tbody>';
 
   for (const row of rows) {
@@ -302,7 +303,7 @@ function renderDataTable(rows, columns) {
         html += '<td class="cell-null">null</td>';
       } else {
         const display = String(val).length > 30 ? String(val).slice(0, 28) + '..' : String(val);
-        html += `<td>${display}</td>`;
+        html += `<td>${esc(display)}</td>`;
       }
     }
     html += '</tr>';
