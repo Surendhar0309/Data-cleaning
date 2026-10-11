@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Universal AI-Powered Data Cleaning Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="header-left">
+    <h1 class="logo">DataClean<span class="logo-ai">AI</span></h1>
+    <span class="version-badge">v2.0</span>
+  </div>
+  <div class="header-center">
+    <div class="server-config">
+      <span id="statusDot" class="status-dot offline"></span>
+      <input id="serverUrl" class="server-input" placeholder="http://localhost:7860" value="http://localhost:7860"/>
+      <button id="btnConnect" class="btn btn-sm">Connect</button>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="sessionBadge" class="session-badge hidden">Session: <code id="sessionId">—</code></span>
+  </div>
+</header>
+
+<!-- Main Content -->
+<main>
+  <!-- Upload Section -->
+  <section id="uploadSection" class="upload-section">
+    <div class="upload-area" id="dropZone">
+      <div class="upload-icon">📁</div>
+      <h2>Upload Your Dataset</h2>
+      <p>Supports CSV, Excel (.xlsx), TSV, and JSON files</p>
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.tsv,.json" hidden/>
+      <button id="btnBrowse" class="btn btn-primary">Browse Files</button>
+      <p class="upload-hint">or drag & drop your file here</p>
+    </div>
+  </section>
+
+  <!-- Dashboard (hidden until upload) -->
+  <section id="dashboard" class="dashboard hidden">
+
+    <!-- Top Metrics Bar -->
+    <div class="metrics-bar">
+      <div class="metric-card">
+        <div class="metric-value" id="metRows">—</div>
+        <div class="metric-label">Rows</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value" id="metCols">—</div>
+        <div class="metric-label">Columns</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value" id="metMissing">—</div>
+        <div class="metric-label">Missing %</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value" id="metDuplicates">—</div>
+        <div class="metric-label">Duplicates</div>
+      </div>
+      <div class="metric-card quality-card">
+        <div class="metric-value" id="metQuality">—</div>
+        <div class="metric-label">Quality Score</div>
+      </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="overview">Overview</button>
+      <button class="tab-btn" data-tab="cleaning">Cleaning</button>
+      <button class="tab-btn" data-tab="outliers">Outliers</button>
+      <button class="tab-btn" data-tab="features">Feature Eng.</button>
+      <button class="tab-btn" data-tab="recommendations">AI Insights</button>
+      <button class="tab-btn" data-tab="data">Data Preview</button>
+    </nav>
+
+    <!-- Tab Panels -->
+    <div class="tab-panels">
+
+      <!-- Overview Tab -->
+      <div id="tab-overview" class="tab-panel active">
+        <div class="panel-grid">
+          <div class="card">
+            <h3 class="card-title">Column Types</h3>
+            <div id="columnTypes" class="column-types"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Quality Score Breakdown</h3>
+            <div id="qualityBreakdown" class="quality-breakdown"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Missing Values Heatmap</h3>
+            <div id="missingHeatmap" class="heatmap-container"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Correlation Matrix</h3>
+            <div id="correlationMatrix" class="correlation-container"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cleaning Tab -->
+      <div id="tab-cleaning" class="tab-panel">
+        <div class="panel-grid two-col">
+          <div class="card">
+            <h3 class="card-title">Missing Values</h3>
+            <div id="missingTable" class="missing-table"></div>
+            <div class="cleaning-form" id="fillForm">
+              <select id="fillColumn" class="form-select"><option>Select column...</option></select>
+              <select id="fillMethod" class="form-select">
+                <option value="mean">Mean</option>
+                <option value="median">Median</option>
+                <option value="mode">Mode</option>
+                <option value="ffill">Forward Fill</option>
+                <option value="bfill">Backward Fill</option>
+                <option value="zero">Zero</option>
+              </select>
+              <button id="btnFill" class="btn btn-primary">Fill Missing</button>
+              <button id="btnDropRows" class="btn btn-danger">Drop Rows</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Duplicates</h3>
+            <div id="duplicateInfo" class="duplicate-info"></div>
+            <button id="btnRemoveDups" class="btn btn-primary">Remove Duplicates</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Outliers Tab -->
+      <div id="tab-outliers" class="tab-panel">
+        <div class="card">
+          <h3 class="card-title">Outlier Detection</h3>
+          <div class="outlier-controls">
+            <select id="outlierColumn" class="form-select"><option>Select column...</option></select>
+            <select id="outlierMethod" class="form-select">
+              <option value="iqr">IQR Method</option>
+              <option value="zscore">Z-Score Method</option>
+            </select>
+            <button id="btnDetectOutliers" class="btn btn-primary">Detect</button>
+            <button id="btnRemoveOutliers" class="btn btn-danger">Remove</button>
+            <button id="btnCapOutliers" class="btn btn-warning">Cap</button>
+          </div>
+          <div id="outlierResults" class="outlier-results"></div>
+        </div>
+      </div>
+
+      <!-- Feature Engineering Tab -->
+      <div id="tab-features" class="tab-panel">
+        <div class="panel-grid two-col">
+          <div class="card">
+            <h3 class="card-title">Encoding</h3>
+            <select id="encodeColumn" class="form-select"><option>Select column...</option></select>
+            <select id="encodeMethod" class="form-select">
+              <option value="label_encode">Label Encoding</option>
+              <option value="one_hot_encode">One-Hot Encoding</option>
+            </select>
+            <button id="btnEncode" class="btn btn-primary">Apply Encoding</button>
+            <div id="encodeResult" class="result-box"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Scaling</h3>
+            <select id="scaleColumn" class="form-select"><option>Select column...</option></select>
+            <select id="scaleMethod" class="form-select">
+              <option value="min_max">Min-Max Scaling</option>
+              <option value="standard">Standard Scaling</option>
+              <option value="log">Log Transformation</option>
+            </select>
+            <button id="btnScale" class="btn btn-primary">Apply Scaling</button>
+            <div id="scaleResult" class="result-box"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Datetime Feature Extraction</h3>
+            <select id="datetimeColumn" class="form-select"><option>Select column...</option></select>
+            <button id="btnDatetime" class="btn btn-primary">Extract Features</button>
+            <div id="datetimeResult" class="result-box"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Recommendations Tab -->
+      <div id="tab-recommendations" class="tab-panel">
+        <div class="card">
+          <h3 class="card-title">AI-Powered Recommendations</h3>
+          <div id="recommendationsList" class="recommendations-list"></div>
+        </div>
+      </div>
+
+      <!-- Data Preview Tab -->
+      <div id="tab-data" class="tab-panel">
+        <div class="card">
+          <div class="data-header">
+            <h3 class="card-title">Data Preview</h3>
+            <div class="download-btns">
+              <button id="btnDownloadCSV" class="btn btn-sm">Download CSV</button>
+              <button id="btnDownloadJSON" class="btn btn-sm">Download JSON</button>
+            </div>
+          </div>
+          <div id="dataTable" class="data-table-container"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p id="loadingText">Processing...</p>
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
